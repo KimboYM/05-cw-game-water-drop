@@ -8,12 +8,29 @@ let combo = 0;
 let comboActive = false;
 let maxCombo = 0;
 
+// --- Difficulty logic additions ---
+let difficulty = 'normal';
+let dropInterval = 1000; // ms
+let badDropChance = 0.25; // default for normal
+
+// --- Game loop background music ---
+let gameLoopAudio = null;
+
 // Wait for button click to start the game
 document.getElementById("start-btn").addEventListener("click", startGame);
 
 function startGame() {
   // Prevent multiple games from running at once
   if (gameRunning) return;
+
+  // Start/loop background music
+  if (!gameLoopAudio) {
+    gameLoopAudio = new Audio('sounds/game-loop.mp3');
+    gameLoopAudio.loop = true;
+    gameLoopAudio.volume = 0.35;
+  }
+  gameLoopAudio.currentTime = 0;
+  gameLoopAudio.play();
 
   gameRunning = true;
   timeLeft = 30; // Reset timer to 30 seconds when starting the game
@@ -28,8 +45,8 @@ function startGame() {
     }
   }, 1000);
 
-  // Create new drops every second (1000 milliseconds)
-  dropMaker = setInterval(createDrop, 1000);
+  // Create new drops at the interval based on difficulty
+  dropMaker = setInterval(createDrop, dropInterval);
 }
 
 function updateComboDisplay() {
@@ -66,7 +83,17 @@ function updateComboDisplay() {
   }
 }
 
-function showScoreAnimation(amount, canRect) {
+function showScoreAnimation(amount, canRect, isBadDrop = false) {
+  // Play sound for collecting a drop
+  if (amount > 0) {
+    const ding = new Audio('sounds/good-drop.mp3');
+    ding.volume = 0.5;
+    ding.play();
+  } else if (amount < 0 && isBadDrop) {
+    const bad = new Audio('sounds/bad-drop.mp3');
+    bad.volume = 0.5;
+    bad.play();
+  }
   const anim = document.createElement('div');
   anim.textContent = amount > 0 ? `+${amount}` : `${amount}`;
   anim.style.position = 'fixed';
@@ -92,7 +119,7 @@ function showScoreAnimation(amount, canRect) {
 
 function createDrop() {
   // Decide if this is a good (blue) or bad (red) drop
-  const isBadDrop = Math.random() < 0.25; // 25% chance for a red drop
+  const isBadDrop = Math.random() < badDropChance;
   const drop = document.createElement("div");
   drop.className = isBadDrop ? "water-drop bad-drop" : "water-drop";
 
@@ -150,7 +177,7 @@ function createDrop() {
         scoreSpan.textContent = score.toString();
         updateComboDisplay();
       }
-      showScoreAnimation(animAmount, canRect);
+      showScoreAnimation(animAmount, canRect, isBadDrop);
       drop.remove();
       return true;
     }
@@ -288,6 +315,13 @@ function createGameOverPopup(score) {
         <h2>Game Over</h2>
         <p style="font-size:1.2em;margin:16px 0;">Final Score: <span id="final-score">${score}</span></p>
         <p style="font-size:1.1em;margin:8px 0 20px 0;">Largest Combo: <span id="final-combo">${maxCombo}</span></p>
+        <label for="gameover-difficulty-select" style="display:block;margin-bottom:12px;font-size:1.05em;text-align:left;">Difficulty:
+          <select id="gameover-difficulty-select" style="margin-left:8px;padding:4px 10px;border-radius:5px;border:1px solid #bbb;font-size:1em;">
+            <option value="easy">Easy (no bad drops)</option>
+            <option value="normal">Normal</option>
+            <option value="hard">Hard (40% bad drops, faster drops)</option>
+          </select>
+        </label>
         <button id="restart-btn" style="padding:10px 28px;font-size:1.1em;background:#2E9DF7;color:#fff;border:none;border-radius:6px;cursor:pointer;">Restart</button>
       </div>
     `;
@@ -297,7 +331,28 @@ function createGameOverPopup(score) {
     document.getElementById('final-combo').textContent = maxCombo;
     popup.style.display = 'flex';
   }
+  // Set the dropdown to the current difficulty
+  const gameoverSelect = document.getElementById('gameover-difficulty-select');
+  if (gameoverSelect) {
+    gameoverSelect.value = difficulty;
+    gameoverSelect.onchange = function() {
+      difficulty = this.value;
+      if (difficulty === 'easy') {
+        badDropChance = 0;
+        dropInterval = 1100;
+      } else if (difficulty === 'normal') {
+        badDropChance = 0.25;
+        dropInterval = 1000;
+      } else if (difficulty === 'hard') {
+        badDropChance = 0.4;
+        dropInterval = 700;
+      }
+    };
+  }
   document.getElementById('restart-btn').onclick = function() {
+    // Also update the main difficulty dropdown for consistency
+    const mainSelect = document.getElementById('difficulty-select');
+    if (mainSelect && gameoverSelect) mainSelect.value = gameoverSelect.value;
     popup.style.display = 'none';
     resetGame();
   };
@@ -313,6 +368,7 @@ function endGame() {
   clearInterval(dropMaker);
   gameRunning = false;
   gameActive = false;
+  if (gameLoopAudio) gameLoopAudio.pause();
   if (combo > maxCombo) maxCombo = combo;
   updateComboDisplay();
   createGameOverPopup(getScore());
@@ -341,3 +397,33 @@ function resetGame() {
 window.addEventListener('DOMContentLoaded', function() {
   updateComboDisplay();
 });
+
+// Listen for difficulty selection
+const difficultySelect = document.getElementById('difficulty-select');
+if (difficultySelect) {
+  difficultySelect.addEventListener('change', function() {
+    difficulty = this.value;
+    if (difficulty === 'easy') {
+      badDropChance = 0;
+      dropInterval = 1100;
+    } else if (difficulty === 'normal') {
+      badDropChance = 0.25;
+      dropInterval = 1000;
+    } else if (difficulty === 'hard') {
+      badDropChance = 0.4;
+      dropInterval = 700;
+    }
+  });
+  // Set initial values based on default selection
+  difficulty = difficultySelect.value;
+  if (difficulty === 'easy') {
+    badDropChance = 0;
+    dropInterval = 1100;
+  } else if (difficulty === 'normal') {
+    badDropChance = 0.25;
+    dropInterval = 1000;
+  } else if (difficulty === 'hard') {
+    badDropChance = 0.4;
+    dropInterval = 700;
+  }
+}
